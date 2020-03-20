@@ -125,36 +125,45 @@ if Save, close(v);end
 
 %%
 %% Allows zooming in and out, change the camera zooming by a predefined curve.
-Save = false;
-window_W_fin = 1000;window_W_init = 10; % too small is not good looking
-window_H_fin = 500; window_H_init = 5; % window_W;
+Save = true;
+% t_list = [0:1/N:0.18, ...
+%           floor(0.18*N)/N:2/N:0.36, ...
+%           floor(0.36*N)/N:4/N:1];
+t_list = [0:1/N:0.08, ...
+          floor(0.08*N)/N:2/N:0.25, ...
+          floor(0.25*N)/N:4/N:0.66, ...
+          floor(0.66*N)/N:6/N:1];
+%t_list = [0:1/N:1];
 comp_n = 600;
+ar = 16/9;
+window_W_fin = 300;window_W_init = 5; % too small is not good looking
+%window_H_fin = 150; window_H_init = 5; % window_W;
+window_H_fin = window_W_fin / ar; window_H_init = window_W_init / ar; % window_W;
+
+winW_list = camera_zoom_curv(t_list, window_W_init, window_W_fin, 'staircase');%  logspace(log10(window_W_init), log10(window_W_fin), length(t_list) + 1);
+winH_list = camera_zoom_curv(t_list, window_H_init, window_H_fin, 'staircase');%  logspace(log10(window_H_init), log10(window_H_fin), length(t_list) + 1);
+if Save
+    v = VideoWriter(sprintf('%s_FFT_zoom_anime',imgnm),'Motion JPEG AVI');%'MPEG-4'
+    v.FrameRate = 15;open(v);
+end
 
 N = length(UAmp);
-idxes = reshape([2:comp_n+1;N+1-[1:comp_n]],1,[]); % select the index of component
-figure("Position",[200,300,1200,600]);%axis equal;set(gca,"YDir","reverse")
-if Save
-v = VideoWriter(sprintf('%s_FFT_zoom_anime',imgnm),'MPEG-4');%'Motion JPEG AVI'
-v.FrameRate = 20;open(v);
-end
-%Frms = {};Fi=1;
-z_store = [];
-t_list = 0:1/N:1;
-winW_list = logspace(log10(window_W_init), log10(window_W_fin), length(t_list) + 1);
-winH_list = logspace(log10(window_H_init), log10(window_H_fin), length(t_list) + 1);
-
+idxes = reshape([2:comp_n+1; 
+                 N+1-[1:comp_n]],1,[]); % select the index of component, interlace the components, make the f, N-f pair neighbor
 % Precompute the coordinates
 z_displ_mat = Ucoef(idxes).*exp(1i*2*pi*freq(idxes)*t_list )/N; % compute complex displacement vector
 z_list_mat = cumsum([zeros(1, length(t_list)); z_displ_mat],1); % cum sum the displacement vectors
 z_store = z_list_mat(end,:);
-rads = UAmp(idxes); % Amplitude for each cycle
+rads = UAmp(idxes)/N; % Amplitude for each cycle
 
-for i = 1:length(t_list)
+%figure("Position",[200,300,1200,600]);%axis equal;set(gca,"YDir","reverse")
+figure("Position",[220          50        1280         720]);%axis equal;set(gca,"YDir","reverse")
+for i = 1:length(t_list)-8%1:length(t_list)
 cla;hold on;axis equal;set(gca,"YDir","reverse");xticks([]);yticks([]);%axis off;
 set(gca,'Color','k','position',[0 0 1 1],'units','normalized')
 z_list = z_list_mat(:, i); zcur = z_list_mat(end, i); z_traj = z_store(1, 1:i);
 % plot the epi circle
-drawCircles([real(z_list(1:end-1)),imag(z_list(1:end-1))], [rads]/N)
+drawCircles([real(z_list(1:end-1)),imag(z_list(1:end-1))], [rads])
 % viscircles([real(z_list(1:end-1)),imag(z_list(1:end-1))], [rads]/N,'Color',[0.3,0.3,0.3]);
 % that is too slow
 
@@ -176,16 +185,29 @@ if Save, writeVideo(v,getframe(gcf));end
 %drawnow
 end
 if Save, close(v);end
+%%
 % Goto https://www.youcompress.com/ for video compression
 %%
-function w_list = camera_zoom_curv(t_list, winit, wend, mode)
+function w_list = camera_zoom_curv(t_list, winit, wend, mode, varargin)
 if nargin == 3
     mode = "exp";
 end
 switch mode
     case "exp"
         w_list = logspace(log10(winit), log10(wend), length(t_list) + 1);
+    case "lin"
+        w_list = linspace((winit), (wend), length(t_list) + 1);
     case "staircase"
-        w_list = logspace(log10(winit), log10(wend), length(t_list) + 1);
+        lvl_n = 6;
+        w_levels = logspace(log10(winit), log10(wend), lvl_n);
+        w_list = zeros(1,length(t_list));
+        stairL = length(t_list) / lvl_n;
+        lmts = floor(((0:lvl_n-1)' + [0.2,0.8]) * stairL);lmts(1,1)=1;lmts(end,2)=length(t_list);
+        for l = 1:lvl_n
+            w_list(lmts(l,1):lmts(l,2)) = w_levels(l);
+            if  l ~= lvl_n
+            w_list(lmts(l,2):lmts(l+1,1)) = logspace(log10(w_levels(l)), log10(w_levels(l + 1)), lmts(l+1,1) - lmts(l,2) + 1);
+            end
+        end
 end
 end
